@@ -8,6 +8,7 @@ treble_template = cv2.imread('Templates/treble.png', 0)
 qnote_template = cv2.imread('Templates/qnote.png', 0)
 hnote_template = cv2.imread('Templates/hnote.png', 0)
 qrest_template = cv2.imread('Templates/qrest.png', 0)
+staff_template = cv2.imread('Templates/staff3.png', 0)
 
 # RGB Colors
 BLACK = (0, 0, 0)
@@ -20,7 +21,20 @@ def template_match(image_bin, image_rgb, template, threshold, rec_color):
     image_rect = image_rgb.copy()
     w_temp, h_temp = template.shape[::-1]  # Dimensions of template
     res = cv2.matchTemplate(image_bin, template, cv2.TM_CCOEFF_NORMED)  # Template match
-    loc = np.where(res >= threshold)  # Only keep locations >= threshold (symbol likely matched)
+    loc_unf = np.where(res >= threshold)  # Only keep locations >= threshold (symbol likely matched)
+
+    loc_test = zip(*loc_unf[::-1])
+
+    # Remove duplicates
+    index = loc_test[0][0]
+    loc = loc_test
+    counter = 0
+    for x in loc_test[1:]:
+        if abs(x[0] - index) > 5:
+            index = x[0]
+            counter = counter + 1
+        else:
+            loc = np.delete(loc, counter + 1, 0)
 
     # Create rectangles in image to showcase symbols found
     for pt in zip(*loc[::-1]):  # Loop through each x,y point in locations matrix
@@ -49,8 +63,21 @@ qrest_loc, img_rect = template_match(img, img_rect, qrest_template, 0.9, BLUE)
 print("Finding a 4 4 time signature:")
 fourfour_loc, img_rect = template_match(img, img_rect, fourfour_template, 0.9, BLACK)
 
-print("Finding a treble cleff:")
+print("Finding a treble:")
 treble_loc, img_rect = template_match(img, img_rect, treble_template, 0.9, BLACK)
 
+print("Finding a staff:")
+staff_loc, img_rect = template_match(img, img_rect, staff_template, 0.9, BLACK)
+
 cv2.imwrite('symbols_found.png', img_rect)  # Keep file with rectangles
+
+# Go through each matched feature and calculate the note value
+
+print("")
+print("Calculating quarter notes")
+staffy = staff_loc[0]       # Recall X and Y are flipped
+
+for pt in zip(*qnotes_loc[::-1]):
+    diff = pt[0] - staffy
+
 
