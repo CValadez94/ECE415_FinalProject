@@ -21,32 +21,31 @@ def template_match(image_bin, image_rgb, template, threshold, rec_color):
     image_rect = image_rgb.copy()
     w_temp, h_temp = template.shape[::-1]  # Dimensions of template
     res = cv2.matchTemplate(image_bin, template, cv2.TM_CCOEFF_NORMED)  # Template match
-    loc_unf = np.where(res >= threshold)  # Only keep locations >= threshold (symbol likely matched)
 
-    loc_test = zip(*loc_unf[::-1])
+    # Only keep locations >= threshold (symbol likely matched), loc_unf in the format: [yaxis_vector], [xaxis_vector]
+    loc_unf = np.where(res >= threshold)
 
-    # Remove duplicates
-    index = loc_test[0][0]
-    loc = loc_test
+    # Remove duplicates by tracking the x-axis values
+    loc = loc_unf
+    index = loc_unf[1][0]  # Assume first element is unique
     counter = 0
-    for x in loc_test[1:]:
-        if abs(x[0] - index) > 5:
-            index = x[0]
+    for x in loc_unf[1][1:]:
+        if abs(x - index) > 5:  # Detect duplicate if it is within a certain range
+            index = x  # Unique element detected
             counter = counter + 1
-        else:
-            loc = np.delete(loc, counter + 1, 0)
+        else:  # Delete duplicate
+            loc = np.delete(loc, counter + 1, 1)
 
     # Create rectangles in image to showcase symbols found
     for pt in zip(*loc[::-1]):  # Loop through each x,y point in locations matrix
         print("X: {0} Y:{1}".format(pt[0], pt[1]))  # Print location found
         cv2.rectangle(image_rect, pt, (pt[0] + w_temp, pt[1] + h_temp), rec_color, 1)  # Create rectangle around symbol
 
-    # TODO: FINDS MULTIPLE HITS AROUND A PIXEL. FIND A WAY TO COMBINE A LOCATION (AVERAGE?) IF THEY ARE NEAR EACH OTHER
     return loc, image_rect
 
 
-img_rgb = cv2.imread('Test1.png')                       # Import test image
-img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)    # Convert to grayscale
+img_rgb = cv2.imread('Test1.png')  # Import test image
+img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
 ret, img = cv2.threshold(img_gray, 127, 255, cv2.THRESH_BINARY)  # Create binary image
 
 img_rect = img_rgb.copy()
@@ -74,10 +73,43 @@ cv2.imwrite('symbols_found.png', img_rect)  # Keep file with rectangles
 # Go through each matched feature and calculate the note value
 
 print("")
-print("Calculating quarter notes")
-staffy = staff_loc[0]       # Recall X and Y are flipped
-
-for pt in zip(*qnotes_loc[::-1]):
-    diff = pt[0] - staffy
+print("Detecting notes")
+staffy = staff_loc[0]  # Recall X and Y are flipped
+print("staffy: {0}".format(staffy))
 
 
+for ypt in qnotes_loc[0][:]:
+    diff = ypt - staffy
+    print("diff: {0}".format(diff))
+
+
+def note_detector(v, ref):
+    note = ''
+    for x in v:
+        if (((x[1] + 15) - ref) > 89) & (((x[1] + 15) - ref) < 123):
+            note = 'f5'
+            print(note)
+        elif (((x[1] + 15) - ref) > 106) & (((x[1] + 15) - ref) < 140):
+            note = 'e5'
+            print(note)
+        elif (((x[1] + 15) - ref) > 123) & (((x[1] + 15) - ref) < 157):
+            note = 'd5'
+            print(note)
+        elif (((x[1] + 15) - ref) > 140) & (((x[1] + 15) - ref) < 174):
+            note = 'c5'
+            print(note)
+        elif (((x[1] + 15) - ref) > 157) & (((x[1] + 15) - ref) < 191):
+            note = 'b4'
+            print(note)
+        elif (((x[1] + 15) - ref) > 174) & (((x[1] + 15) - ref) < 208):
+            note = 'a4'
+            print(note)
+        elif (((x[1] + 15) - ref) > 191) & (((x[1] + 15) - ref) < 225):
+            note = 'g4'
+            print(note)
+        elif (((x[1] + 15) - ref) > 208) & (((x[1] + 15) - ref) < 242):
+            note = 'f4'
+            print(note)
+        elif (((x[1] + 15) - ref) > 225) & (((x[1] + 15) - ref) < 259):
+            note = 'e4'
+            print(note)
