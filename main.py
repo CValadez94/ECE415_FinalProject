@@ -1,17 +1,19 @@
 import numpy as np
-import imutils
+from EasyMIDI import EasyMIDI, Track, Note, Chord
+# import imutils
 import cv2
 from matplotlib import pyplot as plt
 
 # Import templates in grayscale
 fourfour_template = cv2.imread('Templates/44.png', 0)
-treble_template = cv2.imread('Templates/treble.png', 0)
-qnote_template = cv2.imread('Templates/qnote.png', 0)
-# qnote_template = cv2.imread('Templates/quarter.png', 0)
-# qnote_template = cv2.imread('Templates/solid-note.png', 0)
+threefour_template = cv2.imread('Templates/33.png', 0)
+treble_template = cv2.imread('Templates/tr.png', 0)
+qnote_template = cv2.imread('Templates/qn2.png', 0)
+# qnote_template = cv2.imread('Templates/qnote.png', 0)
 hnote_template = cv2.imread('Templates/hnote.png', 0)
 qrest_template = cv2.imread('Templates/qrest.png', 0)
-staff_template = cv2.imread('Templates/staff2.png', 0)
+staff_template = cv2.imread('Templates/st.png', 0)
+# staff_template = cv2.imread('Templates/staff.png', 0)
 
 # RGB Colors
 BLACK = (0, 0, 0)
@@ -49,13 +51,17 @@ def template_match(image_bin, image_rgb, template, threshold, rec_color):
 
         # Create rectangles in image to showcase symbols found
         for pt in zip(*loc[::-1]):  # Loop through each x,y point in locations matrix
-            print("   X: {0} Y:{1}".format(pt[0], pt[1]))  # Print location found
+            # print("   X: {0} Y:{1}".format(pt[0], pt[1]))  # Print location found
             cv2.rectangle(image_rect, pt, (pt[0] + w_temp, pt[1] + h_temp), rec_color, 1)  # Create rectangle around
         # print("   {0} hits".format(len(loc[0])))
     return loc, image_rect, no_hits
 
 
-def note_detector(v):
+def note_detector2(v):
+    staff_separation = 28
+    note = ''
+    octave = 0
+    print(v/staff_separation)
     if ((v + 15) > 89) & ((v + 15) < 123):
         note = 'A'
         octave = 5
@@ -86,36 +92,46 @@ def note_detector(v):
     return note, octave
 
 
-# img_rgb = cv2.imread('Example_Scores/LOZ_SOS_Test1.png')  # Import test image
-img_rgb = cv2.imread('Example_Scores/Test1.png')  # Import test image
+def note_detector(v):
+    note = ''
+    octave = 0
+    if ((v + 15) > 89) & ((v + 15) < 123):
+        note = 'A'
+        octave = 5
+    elif ((v + 15) > 106) & ((v + 15) < 140):
+        note = 'E'
+        octave = 5
+    elif ((v + 15) > 123) & ((v + 15) < 157):
+        note = 'D'
+        octave = 5
+    elif ((v + 15) > 140) & ((v + 15) < 174):
+        note = 'C'
+        octave = 5
+    elif ((v + 15) > 157) & ((v + 15) < 191):
+        note = 'B'
+        octave = 4
+    elif ((v + 15) > 174) & ((v + 15) < 208):
+        note = 'A'
+        octave = 4
+    elif ((v + 15) > 191) & ((v + 15) < 225):
+        note = 'G'
+        octave = 4
+    elif ((v + 15) > 208) & ((v + 15) < 242):
+        note = 'F'
+        octave = 4
+    elif ((v + 15) > 225) & ((v + 15) < 259):
+        note = 'E'
+        octave = 4
+    return note, octave
+
+
+img_rgb = cv2.imread('Example_Scores/LOZ_SOS_Complete_Row1.png')  # Import test image
+# img_rgb = cv2.imread('Example_Scores/Test1.png')  # Import test image
 # img_rgb = cv2.imread('Example_Scores/lost.jpg')
 img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
 ret, img = cv2.threshold(img_gray, 127, 255, cv2.THRESH_BINARY)  # Create binary image
 
 img_rect = img_rgb.copy()
-
-# # SIFT testing, find a good ratio
-# (tH, tW) = img_rect.shape[:2]
-# found = None
-# for scale in np.linspace(0.6, 1.5, 30)[::-1]:
-#     # resized_temp = imutils.resize(staff_template, width=int(staff_template.shape[1] * scale))
-#     resized_temp = imutils.resize(qnote_template, width=int(qnote_template.shape[1] * scale))
-#     r = qnote_template.shape[1] / float(resized_temp.shape[1])
-#
-#     if tH < resized_temp.shape[0] or tW < resized_temp.shape[1]:
-#         break
-#
-#     # print("Scale: {0} ratio: {1}".format(scale, r))
-#     staff_loc, img_temp, no_hits = template_match(img, img_rect, resized_temp, 0.8, RED)
-#
-#     if no_hits is False and (found is None or len(staff_loc[0]) > found[0]):
-#         found = len(staff_loc[0]), scale, r, img_temp, resized_temp
-#
-#     # cv2.imshow("Testing", img_temp)
-#     # cv2.waitKey(0)
-# print("Best match at Scale: {0} ratio: {1} with {2} hits".format(found[1], found[2], found[0]))
-# cv2.imwrite('symbols_found.png', found[3])  # Keep img file with rectangles
-# cv2.imwrite('resizedTemplate.png', found[4])
 
 # Find all the symbols and create a rectangle around them
 # Each column in array notes_matrix is a unique beat
@@ -142,7 +158,7 @@ print("Finding quarter rests:")
 qrest_loc, img_rect, no_hits = template_match(img, img_rect, qrest_template, 0.9, BLUE)
 if no_hits is False:
     lenv = len(qrest_loc[0])
-    qrest_loc = np.vstack((np.full(lenv, 'R'), np.full(lenv, 0), np.full(lenv, 0.25), qrest_loc))
+    qrest_loc = np.vstack((np.full(lenv, 'R'), np.full(lenv, 4), np.full(lenv, 0.25), qrest_loc))
     if notes_matrix is None:
         notes_matrix = qrest_loc
     else:
@@ -152,20 +168,19 @@ fourfour_loc, img_rect, no_hits = template_match(img, img_rect, fourfour_templat
 print("Finding a treble:")
 treble_loc, img_rect, no_hits = template_match(img, img_rect, treble_template, 0.9, BLACK)
 print("Finding a staff:")
-staff_loc, img_rect, no_hits = template_match(img, img_rect, staff_template, 0.8, BLACK)
+staff_loc, img_rect, no_hits = template_match(img, img_rect, staff_template, 0.9, BLACK)
 
 cv2.imwrite('symbols_found.png', img_rect)  # Keep img file with rectangles
 
 # Sort notes_matrix so they are in correct horizontal order
 notes_matrix = notes_matrix[:, notes_matrix[4, :].astype(int).argsort()]
-
 # Go through each matched feature and update to the correct note (including octave)
 print("\nDetecting notes")
 # Calculate mean of staff y axis location. This is reference point for note detection
 staffy = (np.rint(np.median(staff_loc[0])))
+print(staffy)
 for i in range(len(notes_matrix[0])):
     if notes_matrix[0][i] != 'R':       # Skip rest notes, those are good to go
         notes_matrix[0][i], notes_matrix[1][i] = \
             note_detector(notes_matrix[3][i].astype(int) - staffy)
 
-print(notes_matrix)
