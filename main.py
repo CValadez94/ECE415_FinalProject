@@ -1,4 +1,5 @@
 import numpy as np
+from operator import itemgetter
 from EasyMIDI import EasyMIDI, Track, Note, Chord
 # import imutils
 import cv2
@@ -21,24 +22,51 @@ RED = (0, 0, 255)
 BLUE = (255, 0, 0)
 GREEN = (0, 255, 0)
 
-notes_matrix = None
+# Note definitions; element one is Note, element two is octave
+note_defs = {
+    0: ('G', 6),
+    1: ('F', 6),
+    2: ('E', 6),
+    3: ('D', 6),
+    4: ('C', 6),
+    5: ('B', 5),
+    6: ('A', 5),
+    7: ('G', 5),
+    8: ('F', 5),
+    9: ('E', 5),
+    10: ('D', 5),
+    11: ('C', 5),
+    12: ('B', 4),
+    13: ('A', 4),
+    14: ('G', 4),
+    15: ('F', 4),
+    16: ('E', 4),
+    17: ('D', 4),
+    18: ('C', 4),
+    19: ('B', 3),
+    20: ('A', 3),
+    21: ('G', 3),
+    22: ('F', 3),
+    23: ('E', 3),
+    24: ('D', 3)
+}
 
 
 def template_match(image_bin, image_rgb, template, threshold, rec_color):
     image_rect = image_rgb.copy()
-    w_temp, h_temp = template.shape[::-1]  # Dimensions of template
     res = cv2.matchTemplate(image_bin, template, cv2.TM_CCOEFF_NORMED)  # Template match
+    w_temp, h_temp = template.shape[::-1]  # Dimensions of template
 
     # Only keep locations >= threshold (symbol likely matched), loc_unf in the format: [yaxis_vector], [xaxis_vector]
     loc_unf = np.where(res >= threshold)
     if loc_unf[0].size == 0:  # Check if we even got any hits first
         # print("   No hits")
         no_hits = True
-        loc = 0
+        loc = []
     else:
         no_hits = False
-        # Remove duplicates by tracking the x-axis values
 
+        # Remove duplicates by tracking the x-axis values
         loc = loc_unf
         index = loc_unf[1][0]  # Assume first element is unique
         counter = 0
@@ -49,85 +77,65 @@ def template_match(image_bin, image_rgb, template, threshold, rec_color):
             else:  # Delete duplicate
                 loc = np.delete(loc, counter + 1, 1)
 
-        # Create rectangles in image to showcase symbols found
-        for pt in zip(*loc[::-1]):  # Loop through each x,y point in locations matrix
-            # print("   X: {0} Y:{1}".format(pt[0], pt[1]))  # Print location found
-            cv2.rectangle(image_rect, pt, (pt[0] + w_temp, pt[1] + h_temp), rec_color, 1)  # Create rectangle around
-        # print("   {0} hits".format(len(loc[0])))
+        for pt in zip(*loc[::-1]):
+            cv2.rectangle(image_rect, pt, (pt[0] + w_temp, pt[1] + h_temp), rec_color, 1)
     return loc, image_rect, no_hits
 
 
-def note_detector2(v):
-    staff_separation = 28
-    note = ''
-    octave = 0
-    print(v/staff_separation)
-    if ((v + 15) > 89) & ((v + 15) < 123):
-        note = 'A'
-        octave = 5
-    elif ((v + 15) > 106) & ((v + 15) < 140):
-        note = 'E'
-        octave = 5
-    elif ((v + 15) > 123) & ((v + 15) < 157):
-        note = 'D'
-        octave = 5
-    elif ((v + 15) > 140) & ((v + 15) < 174):
-        note = 'C'
-        octave = 5
-    elif ((v + 15) > 157) & ((v + 15) < 191):
-        note = 'B'
-        octave = 4
-    elif ((v + 15) > 174) & ((v + 15) < 208):
-        note = 'A'
-        octave = 4
-    elif ((v + 15) > 191) & ((v + 15) < 225):
-        note = 'G'
-        octave = 4
-    elif ((v + 15) > 208) & ((v + 15) < 242):
-        note = 'F'
-        octave = 4
-    elif ((v + 15) > 225) & ((v + 15) < 259):
-        note = 'E'
-        octave = 4
-    return note, octave
+def duplicate_remover(m):
+    m = m[:, m[1, :].astype(int).argsort()]    # Sort along x coordinate values
+    # m_filt = m[:, m[3, :].astype(int).argsort()]  # Sort along y coordinate values
+
+    print(m)
+    print("Sort")
+    notes_matrix_filt = m
+    unique_x = m[1][0].astype(int)  # Assume first element is unique
+    # unique_y = m[0][0].astype(int)
+    counter = 0
+    for pt in zip(*m[::-1]):
+        print("   X: {0} Y:{1}".format(pt[0], pt[1]))  # Print location found
+        # Detect duplicate if it is within a certain range
+        if abs(pt[0] - unique_x) > 5:
+            unique_x = pt[0]  # Unique element detected
+            unique_y = pt[1]
+            counter = counter + 1
+        else:  # Delete duplicate
+            notes_matrix_filt = np.delete(notes_matrix_filt, counter + 1, 1)
+
+    # Sort along x coordinate values
+    notes_matrix_filt = notes_matrix_filt[:, notes_matrix_filt[4, :].astype(int).argsort()]
+
+    # # Create rectangles in image to showcase symbols found
+    # for pt in zip(*loc[::-1]):  # Loop through each x,y point in locations matrix
+    #     # print("   X: {0} Y:{1}".format(pt[0], pt[1]))  # Print location found
+    #     cv2.rectangle(image_rect, pt, (pt[0] + w_temp, pt[1] + h_temp), rec_color, 1)  # Create rectangle around
+    # # print("   {0} hits".format(len(loc[0])))
+    return notes_matrix_filt
 
 
-def note_detector(v):
-    note = ''
-    octave = 0
-    if ((v + 15) > 89) & ((v + 15) < 123):
-        note = 'A'
-        octave = 5
-    elif ((v + 15) > 106) & ((v + 15) < 140):
-        note = 'E'
-        octave = 5
-    elif ((v + 15) > 123) & ((v + 15) < 157):
-        note = 'D'
-        octave = 5
-    elif ((v + 15) > 140) & ((v + 15) < 174):
-        note = 'C'
-        octave = 5
-    elif ((v + 15) > 157) & ((v + 15) < 191):
-        note = 'B'
-        octave = 4
-    elif ((v + 15) > 174) & ((v + 15) < 208):
-        note = 'A'
-        octave = 4
-    elif ((v + 15) > 191) & ((v + 15) < 225):
-        note = 'G'
-        octave = 4
-    elif ((v + 15) > 208) & ((v + 15) < 242):
-        note = 'F'
-        octave = 4
-    elif ((v + 15) > 225) & ((v + 15) < 259):
-        note = 'E'
-        octave = 4
+def draw_rect(m, image_rect, w_temp, h_temp, rec_color):
+    # Create rectangles in image to showcase symbols found
+    for pt in zip(*m[::-1]):  # Loop through each x,y point in locations matrix
+    # for pt in m:
+        print("0:{0} 1:{1}".format(pt[0], pt[1]))
+        cv2.rectangle(image_rect, pt, (pt[0] + w_temp, pt[1] + h_temp), rec_color, 1)  # Create rectangle around
+    return img_rect
+
+
+def note_detector2(v, offset):
+    staff_separation = 14
+    b = np.round((v+offset)/staff_separation)
+    if b > 24:
+        print("Could not detect a note: b={0}".format(b))
+        note = ''
+        octave = ''
+    else:
+        note = note_defs[b][0]
+        octave = note_defs[b][1]
     return note, octave
 
 
 img_rgb = cv2.imread('Example_Scores/LOZ_SOS_Complete_Row1.png')  # Import test image
-# img_rgb = cv2.imread('Example_Scores/Test1.png')  # Import test image
-# img_rgb = cv2.imread('Example_Scores/lost.jpg')
 img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
 ret, img = cv2.threshold(img_gray, 127, 255, cv2.THRESH_BINARY)  # Create binary image
 
@@ -136,6 +144,7 @@ img_rect = img_rgb.copy()
 # Find all the symbols and create a rectangle around them
 # Each column in array notes_matrix is a unique beat
 #   row1=note row2=octave row3=duration row4=yaxis row4=xaxis
+notes_matrix = None
 print("Finding quarter notes:")
 qnotes_loc, img_rect, no_hits = template_match(img, img_rect, qnote_template, 0.9, RED)
 if no_hits is False:
@@ -145,6 +154,7 @@ if no_hits is False:
         notes_matrix = qnotes_loc
     else:
         notes_matrix = np.concatenate((notes_matrix, qnotes_loc), axis=1)
+
 print("Finding half notes:")
 hnotes_loc, img_rect, no_hits = template_match(img, img_rect, hnote_template, 0.9, GREEN)
 if no_hits is False:
@@ -154,6 +164,7 @@ if no_hits is False:
         notes_matrix = hnotes_loc
     else:
         notes_matrix = np.concatenate((notes_matrix, hnotes_loc), axis=1)
+
 print("Finding quarter rests:")
 qrest_loc, img_rect, no_hits = template_match(img, img_rect, qrest_template, 0.9, BLUE)
 if no_hits is False:
@@ -163,24 +174,59 @@ if no_hits is False:
         notes_matrix = qrest_loc
     else:
         notes_matrix = np.concatenate((notes_matrix, qrest_loc), axis=1)
+
 print("Finding a 4 4 time signature:")
 fourfour_loc, img_rect, no_hits = template_match(img, img_rect, fourfour_template, 0.9, BLACK)
+
 print("Finding a treble:")
 treble_loc, img_rect, no_hits = template_match(img, img_rect, treble_template, 0.9, BLACK)
+
 print("Finding a staff:")
 staff_loc, img_rect, no_hits = template_match(img, img_rect, staff_template, 0.9, BLACK)
+# Calculate mean of staff y axis location. This is reference point for note detection
+staffy = (np.rint(np.median(staff_loc[0])))
 
 cv2.imwrite('symbols_found.png', img_rect)  # Keep img file with rectangles
 
+
+# Go through each matched feature and update to the correct note (including octave)
 # Sort notes_matrix so they are in correct horizontal order
 notes_matrix = notes_matrix[:, notes_matrix[4, :].astype(int).argsort()]
-# Go through each matched feature and update to the correct note (including octave)
 print("\nDetecting notes")
-# Calculate mean of staff y axis location. This is reference point for note detection
-staffy = (np.rint(np.median(staff_loc[0])))
-print(staffy)
 for i in range(len(notes_matrix[0])):
     if notes_matrix[0][i] != 'R':       # Skip rest notes, those are good to go
         notes_matrix[0][i], notes_matrix[1][i] = \
-            note_detector(notes_matrix[3][i].astype(int) - staffy)
+            note_detector2(notes_matrix[3][i].astype(int) - staffy, 12)
 
+print(notes_matrix)
+
+# Convert to MIDI
+print("Writing MIDI file")
+easyMIDI = EasyMIDI()
+track1 = Track("acoustic grand piano")
+unique_x = notes_matrix[4][0].astype(int)       # Keep track of x coordinate
+chord_counter = 0
+chord_notes = []
+for i in range(len(notes_matrix[0])-1):
+    next_x = notes_matrix[4][i+1].astype(int)
+    if abs(unique_x - next_x) < 5:      # Duplicate or possible chord found
+        chord_counter += 1              # Increment counter
+    else:
+        unique_x = next_x
+        if chord_counter > 0:
+        # if False:
+            for j in range(chord_counter):
+                N = Note(notes_matrix[0][i - j], notes_matrix[1][i - j].astype(int),
+                         notes_matrix[2][i - j].astype(float))
+                chord_notes.append(N)
+
+            chord = Chord(chord_notes)
+            track1.addNote(chord)
+            chord_notes = []
+            chord_counter = 0
+        else:
+            N = Note(notes_matrix[0][i], notes_matrix[1][i].astype(int), notes_matrix[2][i].astype(float))
+            track1.addNote(N)
+
+easyMIDI.addTrack(track1)
+easyMIDI.writeMIDI("output.mid")
