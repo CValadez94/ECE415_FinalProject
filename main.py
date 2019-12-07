@@ -1,9 +1,7 @@
 import numpy as np
 from operator import itemgetter
 from EasyMIDI import EasyMIDI, Track, Note, Chord
-# import imutils
 import cv2
-from matplotlib import pyplot as plt
 
 # Import templates in grayscale
 fourfour_template = cv2.imread('Templates/44.png', 0)
@@ -96,13 +94,15 @@ def duplicate_remover(m):
     return m_filt
 
 
-def draw_rect(m, image_rect, w_temp, h_temp, rec_color):
+def draw_rect(m, image_rect, template, rec_color):
+    w_temp, h_temp = template.shape[::-1]  # Dimensions of template
     # Create rectangles in image to showcase symbols found
     for pt in zip(*m[::-1]):  # Loop through each x,y point in locations matrix
-    # for pt in m:
-        print("0:{0} 1:{1}".format(pt[0], pt[1]))
-        cv2.rectangle(image_rect, pt, (pt[0] + w_temp, pt[1] + h_temp), rec_color, 1)  # Create rectangle around
-    return img_rect
+        # print("0:{0} 1:{1}".format(pt[0], pt[1]))
+        start = (pt[0].astype(int), pt[1].astype(int))
+        end = (pt[0].astype(int) + w_temp, pt[1].astype(int) + h_temp)
+        cv2.rectangle(image_rect, start, end, (255, 0, 0), 1)  # Create rectangle around
+    return image_rect
 
 
 def note_detector2(v, offset):
@@ -232,12 +232,12 @@ else:
 print("Finding a staff:")
 staff_loc, img_rect, no_hits = template_match(img, img_rect, staff_template, 0.9, BLACK)
 if no_hits is False:
-    print("   {0} hits".format(len(staff_loc[0])))
+    # Calculate mean of staff y axis location. This is reference point for note detection
+    staffy = (np.rint(np.median(staff_loc[0])))
+    print("   {0} hits, reference y-coordinate {1}".format(len(staff_loc[0]), staffy))
 else:
     print("   No hits")
-# Calculate mean of staff y axis location. This is reference point for note detection
-staffy = (np.rint(np.median(staff_loc[0])))
-
+    staffy = 0
 cv2.imwrite('symbols_found.png', img_rect)  # Keep img file with rectangles
 
 
@@ -249,16 +249,84 @@ for i in range(len(notes_matrix[0])):
         notes_matrix[0][i], notes_matrix[1][i] = \
             note_detector2(notes_matrix[3][i].astype(int) - staffy, 12)
 
-# Adjust for sharps
+print("\n- - - - - - - -\nFiltering detected notes:")
+# Remove duplicates from notes algorithm 2
+notes_x = [int(i) for i in notes_matrix[4][:]]
+notes_y = [int(i) for i in notes_matrix[3][:]]
+sort_ind = np.lexsort((notes_y, notes_x))
+
+notes_x_filt = None
+notes_y_filt = None
+for s in range(len(sort_ind)):
+    if s > 0:
+        notes_x_filt = np.append(notes_x_filt, notes_x[sort_ind[s]])
+        notes_y_filt = np.append(notes_y_filt, notes_y[sort_ind[s]])
+    else:
+        notes_x_filt = notes_x[sort_ind[s]]
+        notes_y_filt = notes_y[sort_ind[s]]
+
+n = None
+for i in range(len(notes_x)):
+    if n is None:
+        n = np.array([(notes_x_filt[i], notes_y_filt[i])])
+    else:
+        n = np.append(n, [(notes_x_filt[i], notes_y_filt[i])], axis=0)
+print("   Unfiltered hits: {0}".format(len(n)))
+
+unique_x = n[0][0]
+unique_y = n[0][1]
+counter = 0
+dup_chord_flag = False
+notes_matrix_filt = notes_matrix
+for i in range(len(n)-1):
+    if (abs(notes_x_filt[i + 1] - unique_x) < 5) and \
+         (abs(notes_y_filt[i + 1] - unique_y) < 5):      # Detected a single note duplicate
+        notes_matrix_filt = np.delete(notes_matrix_filt, counter + 1, 1)
+    else:
+        if dup_chord_flag is True and (abs(notes_x_filt[i + 1] - unique_x) < 5):
+            notes_matrix_filt = np.delete(notes_matrix_filt, counter + 1, 1)
+        elif (abs(notes_x_filt[i + 1] - unique_x) < 5) and \
+                notes_y_filt[i + 1] > unique_y:     # This indicates a chord
+            counter += 1
+            unique_y = notes_y_filt[i + 1]
+        elif (abs(notes_x_filt[i + 1] - unique_x) < 5) and \
+                notes_y_filt[i + 1] < unique_y:     # This indicates chord duplicate
+            notes_matrix_filt = np.delete(notes_matrix_filt, counter + 1, 1)
+            dup_chord_flag = True
+        elif abs(notes_x_filt[i + 1] - unique_x) > 5:    # End of chord duplicates
+            unique_x = notes_x_filt[i + 1]
+            unique_y = notes_y_filt[i + 1]
+            counter += 1
+            dup_chord_flag = False
+
+print("   Filtered hits: {0}".format(len(notes_matrix_filt[0])))
+
+img_rect = draw_rect(notes_matrix_filt, img_rgb, qnote_template, BLUE)
+cv2.imwrite('notes_found_filtered.png', img_rect)  # Keep img file with rectangles
+
+# Adjust for accidental sharps (TODO: and flats)
 print("Adjusting pitches based on accidental sharps")
-for i in range(len(sharp_loc)):
-    for j in range(len(notes_matrix[0])):
-        if abs(sharp_loc[1][i].astype(int) - notes_matrix[4][j].astype(int)) < 40:
-            print("Need a sharp at j={0} for note {1}".format(j, notes_matrix[0][j]))
-            j = len(notes_matrix[0])
+w_temp, h_temp = sharp_template.shape[::-1]  # Dimensions of template
+sharp_x = [int(i + w_temp) for i in sharp_loc[1][:]]
+sharp_y = [int(i + h_temp / 2) for i in sharp_loc[0][:]]
+j = 0
+i = 0
+looping = True
+while looping:
+    if abs(sharp_x[i] - notes_matrix_filt[4][j].astype(int)) < 20 and \
+            abs(sharp_y[i] - notes_matrix_filt[3][j].astype(int)) < 15:
+        print("   Need a sharp at note # {0} --> ({1}#)".format(j, notes_matrix_filt[0][j]))
+        i += 1
+    j += 1
+    # Exit when done or if we reach of x values and couldn't match all sharps to a note
+    if i >= len(sharp_x):
+        looping = False
+    elif j >= len(notes_matrix_filt[0]):
+        print("Couldn't match all the sharps")
+        looping = False
 
-
-# print("\nNotes detected:")
-print(notes_matrix)
+print("\nFinal output")
+print(notes_matrix_filt)
 
 # create_midi(notes_matrix)
+print("\nMIDI file created")
