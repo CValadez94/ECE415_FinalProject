@@ -1,5 +1,4 @@
 import numpy as np
-from operator import itemgetter
 from EasyMIDI import EasyMIDI, Track, Note, Chord
 import cv2
 
@@ -8,7 +7,6 @@ fourfour_template = cv2.imread('Templates/44.png', 0)
 threefour_template = cv2.imread('Templates/34.png', 0)
 treble_template = cv2.imread('Templates/tr.png', 0)
 qnote_template = cv2.imread('Templates/qn2.png', 0)
-# qnote_template = cv2.imread('Templates/qnote.png', 0)
 hnote_template = cv2.imread('Templates/hnote.png', 0)
 qrest_template = cv2.imread('Templates/qrest.png', 0)
 staff_template = cv2.imread('Templates/st.png', 0)
@@ -120,23 +118,22 @@ def note_detector2(v, offset):
 
 def create_midi(m):
     # Convert to MIDI
-    print("Writing MIDI file")
     easyMIDI = EasyMIDI()
-    track1 = Track("acoustic grand piano")
-    unique_x = notes_matrix[4][0].astype(int)  # Keep track of x coordinate
+    track1 = Track("Acoustic Guitar (nylon)", tempo=180)
+    unique_x = m[4][0].astype(int)  # Keep track of x coordinate
     chord_counter = 0
     chord_notes = []
-    for i in range(len(notes_matrix[0]) - 1):
-        next_x = notes_matrix[4][i + 1].astype(int)
+    for i in range(len(m[0]) - 1):
+        next_x = m[4][i + 1].astype(int)
         if abs(unique_x - next_x) < 5:  # Duplicate or possible chord found
             chord_counter += 1  # Increment counter
         else:
             unique_x = next_x
             if chord_counter > 0:
                 # if False:
-                for j in range(chord_counter):
-                    N = Note(notes_matrix[0][i - j], notes_matrix[1][i - j].astype(int),
-                             notes_matrix[2][i - j].astype(float))
+                for j in range(chord_counter + 1):
+                    N = Note(m[0][i - j], m[1][i - j].astype(int),
+                             m[2][i - j].astype(float))
                     chord_notes.append(N)
 
                 chord = Chord(chord_notes)
@@ -144,14 +141,14 @@ def create_midi(m):
                 chord_notes = []
                 chord_counter = 0
             else:
-                N = Note(notes_matrix[0][i], notes_matrix[1][i].astype(int), notes_matrix[2][i].astype(float))
+                N = Note(m[0][i], m[1][i].astype(int), m[2][i].astype(float))
                 track1.addNote(N)
 
     easyMIDI.addTrack(track1)
     easyMIDI.writeMIDI("output.mid")
 
 
-img_rgb = cv2.imread('Example_Scores/LOZ_SOS_Complete_Row1.png')  # Import test image
+img_rgb = cv2.imread('Example_Scores/LOZ_SOS_Complete_Row1_v2.png')  # Import test image
 img_gray = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2GRAY)  # Convert to grayscale
 ret, img = cv2.threshold(img_gray, 127, 255, cv2.THRESH_BINARY)  # Create binary image
 
@@ -316,6 +313,7 @@ while looping:
     if abs(sharp_x[i] - notes_matrix_filt[4][j].astype(int)) < 20 and \
             abs(sharp_y[i] - notes_matrix_filt[3][j].astype(int)) < 15:
         print("   Need a sharp at note # {0} --> ({1}#)".format(j, notes_matrix_filt[0][j]))
+        notes_matrix_filt[0][j] += '#'
         i += 1
     j += 1
     # Exit when done or if we reach of x values and couldn't match all sharps to a note
@@ -328,5 +326,5 @@ while looping:
 print("\nFinal output")
 print(notes_matrix_filt)
 
-# create_midi(notes_matrix)
+create_midi(notes_matrix_filt)
 print("\nMIDI file created")
